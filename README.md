@@ -21,6 +21,9 @@ Main training code: train_3d.py
 
 Data Set: /data/vision/polina/users/razvan/sungmin/stylegan2/sbatch/script_real_data/TFRecords/TFRecords_Float32_Shuffle0
 
+trainig loop : training/training_loop_3d.py
+
+network builder : training/networks_3d.py
 
 
 
