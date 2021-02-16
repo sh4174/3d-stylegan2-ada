@@ -25,6 +25,10 @@ import scipy.misc
 import datetime
 from tqdm import tqdm
 
+# 3D Images - NIFTI
+import nibabel as nib
+
+
 from training import dataset
 
 #----------------------------------------------------------------------------
@@ -93,9 +97,120 @@ class TFRecordExporter:
             quant = np.rint(img).clip(0, 255).astype(np.uint8)
             ex = tf.train.Example(features=tf.train.Features(feature={
                 'shape': tf.train.Feature(int64_list=tf.train.Int64List(value=quant.shape)),
-                'data': tf.train.Feature(bytes_list=tf.train.BytesList(value=[quant.tostring()]))}))
+                'data': tf.train.Feature(bytes_list=tf.train.BytesList(value=[quant.tobytes()]))}))
             tfr_writer.write(ex.SerializeToString())
         self.cur_images += 1
+
+    def add_image3d(self, img):
+        if self.print_progress and self.cur_images % self.progress_interval == 0:
+            print('%d / %d\r' % (self.cur_images, self.expected_images), end='', flush=True)
+        if self.shape is None:
+            self.shape = img.shape
+            self.resolution_log2 = int(np.log2(self.shape[1]))
+            assert self.shape[0] == 1, "Image Channel is not 1"
+            assert self.shape[1] == self.shape[2], "Image Dimension Mismatch"
+            assert self.shape[2] == self.shape[3], "Image Dimension Mismatch"
+            assert self.shape[1] == 2**self.resolution_log2, "Image Dimension must be the order of 2"
+            tfr_opt = tf.io.TFRecordOptions(tf.compat.v1.io.TFRecordCompressionType.NONE)
+            for lod in range(self.resolution_log2 - 1):
+                tfr_file = self.tfr_prefix + '-r%02d.tfrecords' % (self.resolution_log2 - lod)
+                self.tfr_writers.append(tf.io.TFRecordWriter(tfr_file, tfr_opt))
+        assert img.shape == self.shape
+
+        for lod, tfr_writer in enumerate(self.tfr_writers):
+            if lod:
+                img = img.astype(np.float32)
+                img = (img[:, 0::2, 0::2, 0::2] + img[:, 0::2, 0::2, 1::2] + img[:, 0::2, 1::2, 0::2] + img[:, 0::2, 1::2, 1::2] + img[:, 1::2, 0::2, 0::2] + img[:, 1::2, 0::2, 1::2] + img[:, 1::2, 1::2, 0::2] + img[:, 1::2, 1::2, 1::2] ) * 0.125
+
+            quant = img.clip(0, 1.0).astype(np.float32)
+
+            ex = tf.train.Example(features=tf.train.Features(feature={
+                'shape': tf.train.Feature(int64_list=tf.train.Int64List(value=quant.shape)),
+                'data': tf.train.Feature(bytes_list=tf.train.BytesList(value=[quant.tobytes()]))}))
+            tfr_writer.write(ex.SerializeToString())
+
+        self.cur_images += 1
+
+
+    def add_image3d_192(self, img):
+        if self.print_progress and self.cur_images % self.progress_interval == 0:
+            print('%d / %d\r' % (self.cur_images, self.expected_images), end='', flush=True)
+        if self.shape is None:
+            self.shape = img.shape
+            self.resolution_log2 = int(np.log2( self.shape[1] / 3 * 2 ) )
+            # assert self.shape[0] == 1, "Image Channel is not 1"
+            # assert self.shape[1] == self.shape[2], "Image Dimension Mismatch"
+            # assert self.shape[2] == self.shape[3], "Image Dimension Mismatch"
+            # assert self.shape[1] == 2**self.resolution_log2, "Image Dimension must be the order of 2"
+            tfr_opt = tf.io.TFRecordOptions(tf.compat.v1.io.TFRecordCompressionType.NONE)
+            for lod in range(self.resolution_log2 - 1):
+                tfr_file = self.tfr_prefix + '-r%02d.tfrecords' % (self.resolution_log2 - lod)
+                self.tfr_writers.append(tf.io.TFRecordWriter(tfr_file, tfr_opt))
+        assert img.shape == self.shape
+
+        for lod, tfr_writer in enumerate(self.tfr_writers):
+            if lod:
+                img = img.astype(np.float32)
+                img = (img[:, 0::2, 0::2, 0::2] + img[:, 0::2, 0::2, 1::2] + img[:, 0::2, 1::2, 0::2] + img[:, 0::2, 1::2, 1::2] + img[:, 1::2, 0::2, 0::2] + img[:, 1::2, 0::2, 1::2] + img[:, 1::2, 1::2, 0::2] + img[:, 1::2, 1::2, 1::2] ) * 0.125
+
+            print( "===================================================================" )
+            print( "lod" )
+            print( lod )
+            print( "img.shape" )
+            print( img.shape )
+            print( "===================================================================" )
+            
+            quant = img.clip(0, 1.0).astype(np.float32)
+
+            ex = tf.train.Example(features=tf.train.Features(feature={
+                'shape': tf.train.Feature(int64_list=tf.train.Int64List(value=quant.shape)),
+                'data': tf.train.Feature(bytes_list=tf.train.BytesList(value=[quant.tobytes()]))}))
+            tfr_writer.write(ex.SerializeToString())
+
+        self.cur_images += 1
+
+    def add_image3d_curated_real(self, img):
+        if self.print_progress and self.cur_images % self.progress_interval == 0:
+            print('%d / %d\r' % (self.cur_images, self.expected_images), end='', flush=True)
+        if self.shape is None:
+            self.shape = img.shape
+
+            assert self.shape[ 0 ] == 1, "Image Channel is not 1"
+            assert self.shape[ 1 ] == 160 and self.shape[ 2 ] == 192 and self.shape[ 3 ] == 224, "Error: Image dimension is fixed to 160x192x224"
+
+            self.resolution_log2 = int(np.log2( self.shape[1] / 5 * 4 ) )
+            # assert self.shape[0] == 1, "Image Channel is not 1"
+            # assert self.shape[1] == self.shape[2], "Image Dimension Mismatch"
+            # assert self.shape[2] == self.shape[3], "Image Dimension Mismatch"
+            # assert self.shape[1] == 2**self.resolution_log2, "Image Dimension must be the order of 2"
+
+            tfr_opt = tf.io.TFRecordOptions(tf.compat.v1.io.TFRecordCompressionType.NONE)
+            for lod in range(self.resolution_log2 - 1):
+                tfr_file = self.tfr_prefix + '-r%02d.tfrecords' % (self.resolution_log2 - lod)
+                self.tfr_writers.append(tf.io.TFRecordWriter(tfr_file, tfr_opt))
+        assert img.shape == self.shape
+
+        for lod, tfr_writer in enumerate(self.tfr_writers):
+            if lod:
+                img = img.astype(np.float32)
+                img = (img[:, 0::2, 0::2, 0::2] + img[:, 0::2, 0::2, 1::2] + img[:, 0::2, 1::2, 0::2] + img[:, 0::2, 1::2, 1::2] + img[:, 1::2, 0::2, 0::2] + img[:, 1::2, 0::2, 1::2] + img[:, 1::2, 1::2, 0::2] + img[:, 1::2, 1::2, 1::2] ) * 0.125
+
+            print( "===================================================================" )
+            print( "lod" )
+            print( lod )
+            print( "img.shape" )
+            print( img.shape )
+            print( "===================================================================" )
+            
+            quant = img.clip(0, 1.0).astype(np.float32)
+
+            ex = tf.train.Example(features=tf.train.Features(feature={
+                'shape': tf.train.Feature(int64_list=tf.train.Int64List(value=quant.shape)),
+                'data': tf.train.Feature(bytes_list=tf.train.BytesList(value=[quant.tobytes()]))}))
+            tfr_writer.write(ex.SerializeToString())
+
+        self.cur_images += 1
+
 
     def add_labels(self, labels):
         if self.print_progress:
@@ -676,6 +791,69 @@ def create_from_images(tfrecord_dir, image_dir, shuffle):
                 img = img.transpose([2, 0, 1]) # HWC => CHW
             tfr.add_image(img)
 
+
+def create_from_images3d(tfrecord_dir, image_dir, shuffle):
+    print('Loading images from "%s"' % image_dir)
+    image_filenames = sorted(glob.glob(os.path.join(image_dir, '*')))
+    if len(image_filenames) == 0:
+        error('No input images found')
+
+    ref_filename = image_filenames[ 0 ] 
+
+    data_ext = -1 # invalid extension
+
+    if ref_filename[ -3: ] == "npz":
+        data_ext = 1
+    elif ref_filename[ -6: ] == "nii.gz":
+        data_ext = 0
+    else:
+        print( "Data file extension must be nii.gz or npz" )
+        return
+
+    # img = np.asarray(PIL.Image.open(image_filenames[0]))
+    if data_ext == 0:
+        img_nib = nib.load(image_filenames[0])
+        img = np.asarray( img_nib.get_fdata() )
+    else:
+        img = np.load( image_filenames[ 0 ] )
+        img = img[ 'vol_data' ]
+
+    resolution = np.max( img.shape ) / 7 * 4
+    channels = img.shape[3] if img.ndim == 4 else 1
+
+    print( img.shape )
+    print( channels )
+
+    # if img.shape[1] != resolution:
+    #     error('Input images must have the same width and height')
+    # if resolution != 2 ** int(np.floor(np.log2(resolution))):
+    #     error('Input image resolution must be a power-of-two')
+    # if channels not in [1, 3]:
+    #     error('Input images must be stored as RGB or grayscale')
+
+    with TFRecordExporter(tfrecord_dir, len(image_filenames)) as tfr:
+        order = tfr.choose_shuffled_order() if shuffle else np.arange(len(image_filenames))
+        for idx in range(order.size):
+            if data_ext == 0:
+                img_nib = nib.load(image_filenames[order[idx]])
+                img = np.asarray( img_nib.get_fdata() )
+            else:
+                img = np.load( image_filenames[ order[idx] ] )
+                img = img[ 'vol_data' ]
+
+            # img = np.asarray(PIL.Image.open(image_filenames[order[idx]]))
+            if channels == 1:
+                img = img[np.newaxis, :, :, :] # XYZ => CXYZ
+            else:
+                img = img.transpose([3, 0, 1, 2]) # XYZC => CXYZ
+
+            if img.shape[ 1 ] == 192: # Synthetic 192x192x128
+            	tfr.add_image3d_192( img )
+            if img.shape[ 1 ] == 160: # Curated real images 160x192x224
+                tfr.add_image3d_curated_real( img )
+            else:
+            	tfr.add_image3d(img)
+
 #----------------------------------------------------------------------------
 
 def create_from_hdf5(tfrecord_dir, hdf5_filename, shuffle):
@@ -942,6 +1120,14 @@ def execute_cmdline(argv):
 
     p = add_command(    'create_from_images', 'Create dataset from a directory full of images.',
                                             'create_from_images datasets/mydataset myimagedir')
+
+    p.add_argument(     'tfrecord_dir',     help='New dataset directory to be created')
+    p.add_argument(     'image_dir',        help='Directory containing the images')
+    p.add_argument(     '--shuffle',        help='Randomize image order (default: 1)', type=int, default=1)
+    
+    p = add_command(    'create_from_images3d', 'Create dataset from a directory full of 3D NIFTI images.',
+                                            'create_from_images3d datasets/mydataset myimagedir')
+
     p.add_argument(     'tfrecord_dir',     help='New dataset directory to be created')
     p.add_argument(     'image_dir',        help='Directory containing the images')
     p.add_argument(     '--shuffle',        help='Randomize image order (default: 1)', type=int, default=1)

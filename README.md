@@ -1,3 +1,30 @@
+
+** Running code
+
+```.bash
+sbatch cr_no_augada_style3d_Gorig.sbatch 
+```
+
+sbatch file:
+
+sbatch/cr_noaugada_style3d_Gorig.sbatch
+
+```.bash
+--gpus : 4 for debugging codes, 8 for real training (needs to set it manually in the sbatch file and train_3d cfg: stylegan2-3d-anisobase)
+
+--outdir : set it to an output dir 
+
+--aug : currently set to noaug
+```
+
+Main training code: train_3d.py
+
+Data Set: /data/vision/polina/users/razvan/sungmin/stylegan2/sbatch/script_real_data/TFRecords/TFRecords_Float32_Shuffle0
+
+
+
+
+
 ## StyleGAN2 with adaptive discriminator augmentation (ADA)<br>&mdash; Official TensorFlow implementation
 
 ![Teaser image](./docs/stylegan2-ada-teaser-1024x252.png)
